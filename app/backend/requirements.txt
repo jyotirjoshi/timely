@@ -1,0 +1,30 @@
+# Timely Backend — production requirements
+# Pin minor versions for reproducible deployments
+
+# Core API
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.11.7
+pydantic-settings==2.7.0
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg2-binary==2.9.10   # PostgreSQL driver
+
+# Solver engine
+ortools==9.11.4210        # pinned — large package, ensure compatibility
+
+# Auth & security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2             # passlib compatible version
+
+# Utils
+python-multipart==0.0.20
+openpyxl==3.1.5
+httpx==0.27.2
+python-dotenv==1.0.1
+
+# Dev / test (not needed in prod — listed for completeness)
+pytest==8.3.5
