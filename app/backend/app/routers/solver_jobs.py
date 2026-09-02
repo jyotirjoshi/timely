@@ -64,7 +64,12 @@ def _build_dataset(institution_id: str, db: Session) -> dict:
             for c in classes
         ],
         "subjects": [
-            {"id": s.id, "name": s.name, "room_type": s.room_type or "classroom"}
+            {
+                "id": s.id,
+                "name": s.name,
+                "room_type": s.room_type or "classroom",
+                "allow_double": s.allow_double,
+            }
             for s in subjects
         ],
         "lessons": [

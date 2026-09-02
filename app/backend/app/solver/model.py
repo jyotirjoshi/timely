@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+import re
 
 from ortools.sat.python import cp_model
 
@@ -106,6 +107,11 @@ class _Model:
             m.minimize(sum(var * w for var, w, _, _ in self.penalties))
         return None
 
+    def _is_library_subject(self, subject_id: str) -> bool:
+        subject = self.subjects[subject_id]
+        words = set(re.findall(r"[a-z]+", f"{subject_id} {subject.get('name', '')}".lower()))
+        return "library" in words or "lib" in words
+
     # -- hard -----------------------------------------------------------
     def _hard_constraints(self):
         m = self.model
@@ -119,6 +125,10 @@ class _Model:
                     m.add(self.room_var[lid] == self.compat[lid].index(pin["room_id"]))
             for d, p in self.teachers[lesson["teacher_id"]].get("unavailable", []):
                 m.add(self.x[(lid, d, p)] == 0)
+            if self._is_library_subject(lesson["subject_id"]):
+                for d in range(self.n_days):
+                    for p in range(1, self.periods - 1):
+                        m.add(self.x[(lid, d, p)] == 0)
 
         for d, p in self.slots:
             by_teacher: dict[str, list] = {}
@@ -158,6 +168,40 @@ class _Model:
                 for d in range(self.n_days):
                     m.add(sum(self.x[(l["id"], d, p)] for l in t_lessons
                               for p in range(self.periods)) <= teacher["max_per_day"])
+            max_consecutive = teacher.get("max_consecutive")
+            if max_consecutive is None:
+                max_consecutive = (
+                    self.ds.get("hard_constraints", {})
+                    .get("teacher_max_consecutive", {})
+                    .get("max", 3)
+                )
+            if max_consecutive and max_consecutive < self.periods:
+                t_lessons = [l for l in self.lessons if l["teacher_id"] == tid]
+                for d in range(self.n_days):
+                    for p0 in range(self.periods - max_consecutive):
+                        m.add(
+                            sum(
+                                self.x[(l["id"], d, p0 + k)]
+                                for l in t_lessons
+                                for k in range(max_consecutive + 1)
+                            ) <= max_consecutive
+                        )
+
+        for cls_id in self.classes:
+            class_lessons = [l for l in self.lessons if l["class_id"] == cls_id]
+            by_subject: dict[str, list] = {}
+            for lesson in class_lessons:
+                by_subject.setdefault(lesson["subject_id"], []).append(lesson)
+            for sid, lessons in by_subject.items():
+                if self.subjects[sid].get("allow_double", False):
+                    continue
+                for d in range(self.n_days):
+                    for p in range(self.periods - 1):
+                        m.add(
+                            sum(self.x[(l["id"], d, p)] for l in lessons)
+                            + sum(self.x[(l["id"], d, p + 1)] for l in lessons)
+                            <= 1
+                        )
 
     # -- soft -----------------------------------------------------------
     def _soft_constraints(self):
