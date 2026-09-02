@@ -1,0 +1,31 @@
+services:
+  # ── Backend (FastAPI + OR-Tools) ─────────────────────────────────────────
+  - type: web
+    name: timely-backend
+    runtime: docker
+    dockerfilePath: ./app/backend/Dockerfile
+    dockerContext: ./app/backend
+    plan: free
+    region: singapore
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://postgres:YQ4MPeBzY2wfYQ4MPeBzY2wfA9UKA9UK@db.icfnodtqvhjfeqfcatdv.supabase.co:5432/postgres
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AI_PROVIDER
+        value: none
+      - key: FRONTEND_URL
+        value: https://timely-frontend.onrender.com
+
+  # ── Frontend (React + nginx) ─────────────────────────────────────────────
+  - type: web
+    name: timely-frontend
+    runtime: docker
+    dockerfilePath: ./app/Dockerfile
+    dockerContext: ./app
+    plan: free
+    region: singapore
+    envVars:
+      - key: VITE_API_URL
+        value: https://timely-backend.onrender.com
