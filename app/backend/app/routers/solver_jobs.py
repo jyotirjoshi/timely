@@ -19,6 +19,7 @@ from app.db import SessionLocal, get_db
 from app.models import Assignment, Lesson, SolveJob, Timetable, User
 from app.models import Teacher, Room, Class, Subject, Institution
 from app.solver import solve_timetable
+from app.services.access import PLANNING_MUTATOR_ROLES, institution_for, require_roles
 
 router = APIRouter()
 
@@ -152,11 +153,12 @@ def _run_solve(job_id: str, institution_id: str, timetable_name: str,
 
 @router.post("")
 def start_solve(body: SolveRequest, db: Session = Depends(get_db),
-                _: User = Depends(get_current_user)):
+                current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
     """Kick off an async solve job."""
+    institution_id = institution_for(current_user, body.institution_id)
     job = SolveJob(
         id=str(uuid.uuid4()),
-        institution_id=body.institution_id,
+        institution_id=institution_id,
         status="queued",
     )
     db.add(job)
@@ -165,7 +167,7 @@ def start_solve(body: SolveRequest, db: Session = Depends(get_db),
 
     t = threading.Thread(
         target=_run_solve,
-        args=(job.id, body.institution_id, body.timetable_name,
+        args=(job.id, institution_id, body.timetable_name,
               body.time_limit_s, body.seed),
         daemon=True,
     )
@@ -176,8 +178,11 @@ def start_solve(body: SolveRequest, db: Session = Depends(get_db),
 
 @router.get("/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db),
-            _: User = Depends(get_current_user)):
-    job = db.query(SolveJob).filter(SolveJob.id == job_id).first()
+            current_user: User = Depends(get_current_user)):
+    job = db.query(SolveJob).filter(
+        SolveJob.id == job_id,
+        SolveJob.institution_id == institution_for(current_user),
+    ).first()
     if not job:
         raise HTTPException(404, "Job not found")
     return {
@@ -196,11 +201,11 @@ def get_job(job_id: str, db: Session = Depends(get_db),
 
 @router.post("/demo")
 def start_demo_solve(db: Session = Depends(get_db),
-                     _: User = Depends(get_current_user)):
+                     current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
     """Solve the built-in sample dataset (no DB required). Returns job_id."""
     from app.solver.sample_data import build_sample_dataset
 
-    job = SolveJob(id=str(uuid.uuid4()), institution_id="demo", status="queued")
+    job = SolveJob(id=str(uuid.uuid4()), institution_id=institution_for(current_user), status="queued")
     db.add(job); db.commit(); db.refresh(job)
 
     def _run():

@@ -9,6 +9,11 @@ from typing import Optional
 from app.auth import get_current_user
 from app.db import get_db
 from app.models import Teacher, User
+from app.models import Subject
+from app.services.access import (
+    PLANNING_MUTATOR_ROLES, institution_for, require_roles,
+    tenant_resource, tenant_resources,
+)
 
 router = APIRouter()
 
@@ -45,13 +50,17 @@ def _s(t: Teacher) -> dict:
 
 @router.get("")
 def list_teachers(institution_id: str, db: Session = Depends(get_db),
-                  _: User = Depends(get_current_user)):
+                  current_user: User = Depends(get_current_user)):
+    institution_id = institution_for(current_user, institution_id)
     return [_s(t) for t in db.query(Teacher).filter(Teacher.institution_id == institution_id).all()]
 
 
 @router.post("", status_code=201)
 def create_teacher(institution_id: str, body: TeacherIn,
-                   db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+                   db: Session = Depends(get_db),
+                   current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    institution_id = institution_for(current_user, institution_id)
+    tenant_resources(db, Subject, body.subjects, institution_id, "Subject not found")
     t = Teacher(institution_id=institution_id, **body.model_dump())
     db.add(t); db.commit(); db.refresh(t)
     return _s(t)
@@ -59,17 +68,19 @@ def create_teacher(institution_id: str, body: TeacherIn,
 
 @router.get("/{teacher_id}")
 def get_teacher(teacher_id: str, db: Session = Depends(get_db),
-                _: User = Depends(get_current_user)):
-    t = db.query(Teacher).filter(Teacher.id == teacher_id).first()
-    if not t: raise HTTPException(404, "Teacher not found")
+                current_user: User = Depends(get_current_user)):
+    t = tenant_resource(db, Teacher, teacher_id, institution_for(current_user), "Teacher not found")
     return _s(t)
 
 
 @router.patch("/{teacher_id}")
 def update_teacher(teacher_id: str, body: TeacherUpdate,
-                   db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    t = db.query(Teacher).filter(Teacher.id == teacher_id).first()
-    if not t: raise HTTPException(404, "Teacher not found")
+                   db: Session = Depends(get_db),
+                   current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    institution_id = institution_for(current_user)
+    t = tenant_resource(db, Teacher, teacher_id, institution_id, "Teacher not found")
+    if body.subjects is not None:
+        tenant_resources(db, Subject, body.subjects, institution_id, "Subject not found")
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(t, k, v)
     db.commit(); db.refresh(t)
@@ -78,7 +89,6 @@ def update_teacher(teacher_id: str, body: TeacherUpdate,
 
 @router.delete("/{teacher_id}", status_code=204)
 def delete_teacher(teacher_id: str, db: Session = Depends(get_db),
-                   _: User = Depends(get_current_user)):
-    t = db.query(Teacher).filter(Teacher.id == teacher_id).first()
-    if not t: raise HTTPException(404, "Teacher not found")
+                   current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    t = tenant_resource(db, Teacher, teacher_id, institution_for(current_user), "Teacher not found")
     db.delete(t); db.commit()

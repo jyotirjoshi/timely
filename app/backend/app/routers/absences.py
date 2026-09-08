@@ -17,6 +17,10 @@ from app.models import (
     Assignment, Institution, SubstituteAssignment,
     Teacher, TeacherAbsence, Timetable, User
 )
+from app.services.access import (
+    PLANNING_MUTATOR_ROLES, institution_for, require_roles,
+    tenant_assignment, tenant_resource,
+)
 
 router = APIRouter()
 
@@ -127,7 +131,8 @@ def _find_substitutes_for_absence(
 
 @router.get("")
 def list_absences(institution_id: str, db: Session = Depends(get_db),
-                  _: User = Depends(get_current_user)):
+                  current_user: User = Depends(get_current_user)):
+    institution_id = institution_for(current_user, institution_id)
     return [_s_absence(a) for a in
             db.query(TeacherAbsence)
               .filter(TeacherAbsence.institution_id == institution_id)
@@ -137,9 +142,12 @@ def list_absences(institution_id: str, db: Session = Depends(get_db),
 
 @router.post("", status_code=201)
 def create_absence(body: AbsenceIn, db: Session = Depends(get_db),
-                   _: User = Depends(get_current_user)):
+                   current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    institution_id = institution_for(current_user, body.institution_id)
+    tenant_resource(db, Teacher, body.teacher_id, institution_id, "Teacher not found")
     # Prevent duplicate
     existing = db.query(TeacherAbsence).filter(
+        TeacherAbsence.institution_id == institution_id,
         TeacherAbsence.teacher_id == body.teacher_id,
         TeacherAbsence.date == body.date
     ).first()
@@ -147,7 +155,7 @@ def create_absence(body: AbsenceIn, db: Session = Depends(get_db),
         return _s_absence(existing)
 
     absence = TeacherAbsence(
-        institution_id=body.institution_id,
+        institution_id=institution_id,
         teacher_id=body.teacher_id,
         date=body.date,
         reason=body.reason,
@@ -158,9 +166,10 @@ def create_absence(body: AbsenceIn, db: Session = Depends(get_db),
 
 @router.delete("/{absence_id}", status_code=204)
 def delete_absence(absence_id: str, db: Session = Depends(get_db),
-                   _: User = Depends(get_current_user)):
-    a = db.query(TeacherAbsence).filter(TeacherAbsence.id == absence_id).first()
-    if not a: raise HTTPException(404, "Absence not found")
+                   current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    a = tenant_resource(
+        db, TeacherAbsence, absence_id, institution_for(current_user), "Absence not found"
+    )
     # Also remove substitute assignments
     db.query(SubstituteAssignment).filter(
         SubstituteAssignment.absence_id == absence_id).delete()
@@ -171,17 +180,19 @@ def delete_absence(absence_id: str, db: Session = Depends(get_db),
 def get_substitute_suggestions(
     absence_id: str, timetable_id: str,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     For a given absence, return per-period substitute suggestions
     based on the active published/solved timetable.
     """
-    absence = db.query(TeacherAbsence).filter(TeacherAbsence.id == absence_id).first()
-    if not absence: raise HTTPException(404, "Absence not found")
-
-    timetable = db.query(Timetable).filter(Timetable.id == timetable_id).first()
-    if not timetable: raise HTTPException(404, "Timetable not found")
+    institution_id = institution_for(current_user)
+    absence = tenant_resource(
+        db, TeacherAbsence, absence_id, institution_id, "Absence not found"
+    )
+    timetable = tenant_resource(
+        db, Timetable, timetable_id, institution_id, "Timetable not found"
+    )
 
     suggestions = _find_substitutes_for_absence(absence, timetable, db)
 
@@ -202,24 +213,23 @@ def apply_substitutes(
     absence_id: str, timetable_id: str,
     body: SubstituteConfirm,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))
 ):
     """
     Apply confirmed substitute assignments.
     This does NOT modify the base timetable permanently —
     it records substitute overrides for that specific date.
     """
-    absence = db.query(TeacherAbsence).filter(TeacherAbsence.id == absence_id).first()
-    if not absence: raise HTTPException(404, "Absence not found")
-
-    timetable = db.query(Timetable).filter(Timetable.id == timetable_id).first()
-    if not timetable: raise HTTPException(404, "Timetable not found")
+    institution_id = institution_for(current_user)
+    absence = tenant_resource(
+        db, TeacherAbsence, absence_id, institution_id, "Absence not found"
+    )
+    tenant_resource(db, Timetable, timetable_id, institution_id, "Timetable not found")
 
     applied = []
     for assignment_id, sub_teacher_id in body.substitutes.items():
-        a = db.query(Assignment).filter(Assignment.id == assignment_id).first()
-        if not a:
-            continue
+        a = tenant_assignment(db, assignment_id, timetable_id, institution_id)
+        tenant_resource(db, Teacher, sub_teacher_id, institution_id, "Teacher not found")
 
         # Remove old substitute if exists
         db.query(SubstituteAssignment).filter(
@@ -252,8 +262,11 @@ def apply_substitutes(
 def get_confirmed_substitutes(
     absence_id: str,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
+    tenant_resource(
+        db, TeacherAbsence, absence_id, institution_for(current_user), "Absence not found"
+    )
     subs = db.query(SubstituteAssignment).filter(
         SubstituteAssignment.absence_id == absence_id,
         SubstituteAssignment.confirmed == True

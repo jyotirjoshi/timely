@@ -10,6 +10,7 @@ from datetime import date as DateType
 from app.auth import get_current_user
 from app.db import get_db
 from app.models import Institution, User
+from app.services.access import PLANNING_MUTATOR_ROLES, institution_for, require_roles
 
 router = APIRouter()
 
@@ -45,6 +46,7 @@ def _serialize(inst: Institution) -> dict:
 @router.get("/{institution_id}")
 def get_institution(institution_id: str, db: Session = Depends(get_db),
                     current_user: User = Depends(get_current_user)):
+    institution_id = institution_for(current_user, institution_id)
     inst = db.query(Institution).filter(Institution.id == institution_id).first()
     if not inst:
         raise HTTPException(404, "Institution not found")
@@ -54,7 +56,8 @@ def get_institution(institution_id: str, db: Session = Depends(get_db),
 @router.patch("/{institution_id}")
 def update_institution(institution_id: str, body: InstitutionUpdate,
                        db: Session = Depends(get_db),
-                       current_user: User = Depends(get_current_user)):
+                       current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    institution_id = institution_for(current_user, institution_id)
     inst = db.query(Institution).filter(Institution.id == institution_id).first()
     if not inst:
         raise HTTPException(404, "Institution not found")

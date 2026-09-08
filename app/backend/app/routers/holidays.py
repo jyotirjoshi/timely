@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.db import get_db
 from app.models import Holiday, User
+from app.services.access import (
+    PLANNING_MUTATOR_ROLES, institution_for, require_roles, tenant_resource,
+)
 
 router = APIRouter()
 
@@ -75,7 +78,8 @@ def _s(h: Holiday) -> dict:
 
 @router.get("")
 def list_holidays(institution_id: str, db: Session = Depends(get_db),
-                  _: User = Depends(get_current_user)):
+                  current_user: User = Depends(get_current_user)):
+    institution_id = institution_for(current_user, institution_id)
     return [_s(h) for h in
             db.query(Holiday)
               .filter(Holiday.institution_id == institution_id)
@@ -85,7 +89,9 @@ def list_holidays(institution_id: str, db: Session = Depends(get_db),
 
 @router.post("", status_code=201)
 def create_holiday(institution_id: str, body: HolidayIn,
-                   db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+                   db: Session = Depends(get_db),
+                   current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    institution_id = institution_for(current_user, institution_id)
     h = Holiday(institution_id=institution_id,
                 date=body.date, name=body.name, type=body.type)
     db.add(h); db.commit(); db.refresh(h)
@@ -94,9 +100,8 @@ def create_holiday(institution_id: str, body: HolidayIn,
 
 @router.delete("/{holiday_id}", status_code=204)
 def delete_holiday(holiday_id: str, db: Session = Depends(get_db),
-                   _: User = Depends(get_current_user)):
-    h = db.query(Holiday).filter(Holiday.id == holiday_id).first()
-    if not h: raise HTTPException(404, "Holiday not found")
+                   current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    h = tenant_resource(db, Holiday, holiday_id, institution_for(current_user), "Holiday not found")
     db.delete(h); db.commit()
 
 
@@ -104,11 +109,12 @@ def delete_holiday(holiday_id: str, db: Session = Depends(get_db),
 def seed_india_holidays(institution_id: str, year: int = 2026,
                         include_school_breaks: bool = True,
                         db: Session = Depends(get_db),
-                        _: User = Depends(get_current_user)):
+                        current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
     """
     Seed all Indian national holidays + school calendar breaks for a given year.
     Skips dates that already exist (idempotent).
     """
+    institution_id = institution_for(current_user, institution_id)
     existing_dates = {h.date for h in
                       db.query(Holiday).filter(Holiday.institution_id == institution_id).all()}
 
@@ -133,8 +139,9 @@ def seed_india_holidays(institution_id: str, year: int = 2026,
 
 @router.delete("")
 def clear_holidays(institution_id: str, db: Session = Depends(get_db),
-                   _: User = Depends(get_current_user)):
+                   current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
     """Clear all holidays for an institution."""
+    institution_id = institution_for(current_user, institution_id)
     db.query(Holiday).filter(Holiday.institution_id == institution_id).delete()
     db.commit()
     return {"message": "All holidays cleared"}

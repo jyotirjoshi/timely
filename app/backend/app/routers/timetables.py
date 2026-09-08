@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app.auth import get_current_user
 from app.db import get_db
-from app.models import Assignment, Timetable, User
+from app.models import Assignment, Room, Timetable, User
+from app.services.access import (
+    PLANNING_MUTATOR_ROLES, institution_for, require_roles,
+    tenant_assignment, tenant_resource,
+)
 
 router = APIRouter()
 
@@ -41,7 +45,8 @@ def _st(t: Timetable, include_assignments: bool = False) -> dict:
 
 @router.get("")
 def list_timetables(institution_id: str, db: Session = Depends(get_db),
-                    _: User = Depends(get_current_user)):
+                    current_user: User = Depends(get_current_user)):
+    institution_id = institution_for(current_user, institution_id)
     return [_st(t) for t in
             db.query(Timetable).filter(Timetable.institution_id == institution_id)
               .order_by(Timetable.created_at.desc()).all()]
@@ -49,17 +54,15 @@ def list_timetables(institution_id: str, db: Session = Depends(get_db),
 
 @router.get("/{timetable_id}")
 def get_timetable(timetable_id: str, db: Session = Depends(get_db),
-                  _: User = Depends(get_current_user)):
-    t = db.query(Timetable).filter(Timetable.id == timetable_id).first()
-    if not t: raise HTTPException(404, "Timetable not found")
+                  current_user: User = Depends(get_current_user)):
+    t = tenant_resource(db, Timetable, timetable_id, institution_for(current_user), "Timetable not found")
     return _st(t, include_assignments=True)
 
 
 @router.patch("/{timetable_id}/publish")
 def publish_timetable(timetable_id: str, db: Session = Depends(get_db),
-                      _: User = Depends(get_current_user)):
-    t = db.query(Timetable).filter(Timetable.id == timetable_id).first()
-    if not t: raise HTTPException(404, "Timetable not found")
+                      current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    t = tenant_resource(db, Timetable, timetable_id, institution_for(current_user), "Timetable not found")
     t.status = "published"
     t.published_at = datetime.now(timezone.utc)
     db.commit(); db.refresh(t)
@@ -68,9 +71,8 @@ def publish_timetable(timetable_id: str, db: Session = Depends(get_db),
 
 @router.patch("/{timetable_id}/unpublish")
 def unpublish_timetable(timetable_id: str, db: Session = Depends(get_db),
-                        _: User = Depends(get_current_user)):
-    t = db.query(Timetable).filter(Timetable.id == timetable_id).first()
-    if not t: raise HTTPException(404, "Timetable not found")
+                        current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    t = tenant_resource(db, Timetable, timetable_id, institution_for(current_user), "Timetable not found")
     t.status = "solved"
     t.published_at = None
     db.commit(); db.refresh(t)
@@ -79,9 +81,8 @@ def unpublish_timetable(timetable_id: str, db: Session = Depends(get_db),
 
 @router.delete("/{timetable_id}", status_code=204)
 def delete_timetable(timetable_id: str, db: Session = Depends(get_db),
-                     _: User = Depends(get_current_user)):
-    t = db.query(Timetable).filter(Timetable.id == timetable_id).first()
-    if not t: raise HTTPException(404, "Timetable not found")
+                     current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    t = tenant_resource(db, Timetable, timetable_id, institution_for(current_user), "Timetable not found")
     db.delete(t); db.commit()
 
 
@@ -89,18 +90,15 @@ def delete_timetable(timetable_id: str, db: Session = Depends(get_db),
 def update_assignment(timetable_id: str, assignment_id: str,
                       body: AssignmentUpdate,
                       db: Session = Depends(get_db),
-                      _: User = Depends(get_current_user)):
+                      current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
     """Move a single assignment — used for drag-and-drop editing."""
-    t = db.query(Timetable).filter(Timetable.id == timetable_id).first()
-    if not t: raise HTTPException(404, "Timetable not found")
+    institution_id = institution_for(current_user)
+    t = tenant_resource(db, Timetable, timetable_id, institution_id, "Timetable not found")
     if t.status == "published":
         raise HTTPException(400, "Cannot edit a published timetable")
 
-    a = db.query(Assignment).filter(
-        Assignment.id == assignment_id,
-        Assignment.timetable_id == timetable_id
-    ).first()
-    if not a: raise HTTPException(404, "Assignment not found")
+    a = tenant_assignment(db, assignment_id, timetable_id, institution_id)
+    tenant_resource(db, Room, body.room_id, institution_id, "Room not found")
 
     # Conflict check: same class, teacher, or room in the target slot
     conflicts = db.query(Assignment).filter(

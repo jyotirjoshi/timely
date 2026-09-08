@@ -27,6 +27,10 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.db import get_db
 from app.models import Assignment, Teacher, Class, Subject, Room, Timetable, Institution, User
+from app.services.access import (
+    PLANNING_MUTATOR_ROLES, institution_for, require_roles,
+    tenant_assignment, tenant_resource,
+)
 
 # Load .env every time the module is imported (picks up keys added after first start)
 load_dotenv(override=True)
@@ -76,11 +80,8 @@ class ApplyPlanRequest(BaseModel):
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
-def _find_timetable(tid: str, db: Session) -> Timetable:
-    t = db.query(Timetable).filter(Timetable.id == tid).first()
-    if not t:
-        raise HTTPException(404, "Timetable not found")
-    return t
+def _find_timetable(tid: str, institution_id: str, db: Session) -> Timetable:
+    return tenant_resource(db, Timetable, tid, institution_id, "Timetable not found")
 
 
 def _get_lookup(institution_id: str, db: Session):
@@ -721,11 +722,12 @@ RULE 5 — Be concise. The user is a college admin, not a student.
 # ── main endpoint ──────────────────────────────────────────────────────────────
 @router.post("/chat", response_model=ChatResponse)
 def chat(body: ChatMessage, db: Session = Depends(get_db),
-         _: User = Depends(get_current_user)):
+         current_user: User = Depends(get_current_user)):
     cfg = _cfg()  # read .env fresh every request
 
-    timetable = _find_timetable(body.timetable_id, db)
-    teachers, classes, subjects, rooms, institution = _get_lookup(body.institution_id, db)
+    institution_id = institution_for(current_user, body.institution_id)
+    timetable = _find_timetable(body.timetable_id, institution_id, db)
+    teachers, classes, subjects, rooms, institution = _get_lookup(institution_id, db)
     days    = (institution.day_labels if institution else None) or ["Mon", "Tue", "Wed", "Thu", "Fri"]
     periods = (institution.periods_per_day if institution else 7)
 
@@ -779,25 +781,31 @@ def chat(body: ChatMessage, db: Session = Depends(get_db),
 # ── apply plan endpoint ────────────────────────────────────────────────────────
 @router.post("/apply-plan")
 def apply_plan(body: ApplyPlanRequest, db: Session = Depends(get_db),
-               _: User = Depends(get_current_user)):
-    timetable = db.query(Timetable).filter(Timetable.id == body.timetable_id).first()
-    if not timetable:
-        raise HTTPException(404, "Timetable not found")
+               current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
+    institution_id = institution_for(current_user)
+    timetable = tenant_resource(
+        db, Timetable, body.timetable_id, institution_id, "Timetable not found"
+    )
     if timetable.status == "published":
         raise HTTPException(400, "Unpublish the timetable before editing.")
 
     applied, skipped = [], []
 
     for change in body.changes:
-        a = db.query(Assignment).filter(
-            Assignment.id == change.assignment_id,
-            Assignment.timetable_id == body.timetable_id,
-        ).first()
-        if not a:
+        try:
+            a = tenant_assignment(
+                db, change.assignment_id, body.timetable_id, institution_id
+            )
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
             skipped.append({"id": change.assignment_id, "reason": "not found"})
             continue
 
         if change.type == "substitute" and change.new_teacher_id:
+            tenant_resource(
+                db, Teacher, change.new_teacher_id, institution_id, "Teacher not found"
+            )
             a.teacher_id = change.new_teacher_id
             applied.append({"type": "substitute", "id": a.id})
 
