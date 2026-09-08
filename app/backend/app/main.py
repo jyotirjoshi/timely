@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import (
     auth, institutions, teachers, rooms, classes, subjects,
     lessons, timetables, solver_jobs, agent,
-    holidays, absences, presets,
+    holidays, absences, presets, departments,
 )
 
 
@@ -57,6 +57,7 @@ app.include_router(agent.router,        prefix="/api/agent",        tags=["agent
 app.include_router(holidays.router,     prefix="/api/holidays",     tags=["holidays"])
 app.include_router(absences.router,     prefix="/api/absences",     tags=["absences"])
 app.include_router(presets.router,      prefix="/api/presets",      tags=["presets"])
+app.include_router(departments.router,  prefix="/api/departments",  tags=["departments"])
 
 
 @app.get("/api/health")

@@ -74,4 +74,11 @@ print("  OK        substitute_assignments table")
 
 conn.commit()
 conn.close()
+
+# Create newly introduced tables, including academic organization and calendars.
+# Existing tables are left unchanged; column additions above remain idempotent.
+from app import models  # noqa: E402,F401
+from app.db import Base, engine  # noqa: E402
+
+Base.metadata.create_all(bind=engine)
 print("\nMigration complete. Start the server now.")

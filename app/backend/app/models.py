@@ -4,12 +4,12 @@ SQLAlchemy ORM models for Timely.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, date
+from datetime import date, datetime, time
 from typing import Optional
 
 from sqlalchemy import (
     Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON,
-    String, Text, func,
+    String, Text, Time, UniqueConstraint, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -65,6 +65,91 @@ class Institution(Base):
     subjects: Mapped[list["Subject"]] = relationship("Subject", back_populates="institution", cascade="all, delete-orphan")
     timetables: Mapped[list["Timetable"]] = relationship("Timetable", back_populates="institution", cascade="all, delete-orphan")
     holidays: Mapped[list["Holiday"]] = relationship("Holiday", back_populates="institution", cascade="all, delete-orphan")
+
+
+# ---------------------------------------------------------------------------
+# Academic organization and local calendars
+# ---------------------------------------------------------------------------
+
+class School(Base):
+    __tablename__ = "schools"
+    __table_args__ = (UniqueConstraint("institution_id", "code", name="uq_school_code"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    code: Mapped[str] = mapped_column(String, nullable=False)
+
+    departments: Mapped[list["Department"]] = relationship(
+        "Department", back_populates="school", cascade="all, delete-orphan"
+    )
+
+
+class Department(Base):
+    __tablename__ = "departments"
+    __table_args__ = (UniqueConstraint("institution_id", "code", name="uq_department_code"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    school_id: Mapped[str] = mapped_column(ForeignKey("schools.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    code: Mapped[str] = mapped_column(String, nullable=False)
+
+    school: Mapped["School"] = relationship("School", back_populates="departments")
+    calendars: Mapped[list["DepartmentCalendar"]] = relationship(
+        "DepartmentCalendar", back_populates="department", cascade="all, delete-orphan"
+    )
+
+
+class DepartmentCalendar(Base):
+    __tablename__ = "department_calendars"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    department_id: Mapped[str] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    timezone: Mapped[str] = mapped_column(String, default="Asia/Kolkata")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    department: Mapped["Department"] = relationship("Department", back_populates="calendars")
+    periods: Mapped[list["CalendarPeriod"]] = relationship(
+        "CalendarPeriod", back_populates="calendar", cascade="all, delete-orphan",
+        order_by="CalendarPeriod.day, CalendarPeriod.ordinal",
+    )
+
+
+class CalendarPeriod(Base):
+    __tablename__ = "calendar_periods"
+    __table_args__ = (
+        UniqueConstraint("calendar_id", "day", "ordinal", name="uq_calendar_day_ordinal"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    calendar_id: Mapped[str] = mapped_column(ForeignKey("department_calendars.id"), nullable=False)
+    day: Mapped[int] = mapped_column(Integer, nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    kind: Mapped[str] = mapped_column(String, default="teaching")
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+
+    calendar: Mapped["DepartmentCalendar"] = relationship("DepartmentCalendar", back_populates="periods")
+
+
+class FacultyShift(Base):
+    __tablename__ = "faculty_shifts"
+    __table_args__ = (
+        UniqueConstraint("teacher_id", "department_id", "day", "start_time", "end_time", name="uq_faculty_shift"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("teachers.id"), nullable=False)
+    department_id: Mapped[str] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    day: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
 
 
 # ---------------------------------------------------------------------------

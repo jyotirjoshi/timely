@@ -82,6 +82,7 @@ def init_db():
     # Register all models with Base.metadata
     from app.models import (  # noqa: F401
         User, Institution, Teacher, Room, Class, Subject,
+        School, Department, DepartmentCalendar, CalendarPeriod, FacultyShift,
         Lesson, Timetable, Assignment, SolveJob,
         Holiday, TeacherAbsence, SubstituteAssignment,
     )
