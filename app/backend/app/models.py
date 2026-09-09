@@ -325,6 +325,57 @@ class WorkloadAllocation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
 
+class AcademicTerm(Base):
+    __tablename__ = "academic_terms"
+    __table_args__ = (UniqueConstraint("institution_id", "name", name="uq_academic_term"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    starts_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[date] = mapped_column(Date, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class CurriculumRequirement(Base):
+    __tablename__ = "curriculum_requirements"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    term_id: Mapped[str] = mapped_column(ForeignKey("academic_terms.id"), nullable=False)
+    division_id: Mapped[str] = mapped_column(ForeignKey("divisions.id"), nullable=False)
+    batch_id: Mapped[Optional[str]] = mapped_column(ForeignKey("batches.id"), nullable=True)
+    subject_component_id: Mapped[str] = mapped_column(ForeignKey("subject_components.id"), nullable=False)
+    weekly_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    faculty_pool: Mapped[list] = mapped_column(JSON, default=list)
+    room_type: Mapped[str] = mapped_column(String, default="classroom")
+    alternate_week_pattern: Mapped[str] = mapped_column(String, default="every")
+    parallel_group: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class SchedulingActivity(Base):
+    __tablename__ = "scheduling_activities"
+    __table_args__ = (
+        UniqueConstraint("requirement_id", "occurrence_index", name="uq_requirement_occurrence"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    term_id: Mapped[str] = mapped_column(ForeignKey("academic_terms.id"), nullable=False)
+    requirement_id: Mapped[str] = mapped_column(ForeignKey("curriculum_requirements.id"), nullable=False)
+    occurrence_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    division_id: Mapped[str] = mapped_column(ForeignKey("divisions.id"), nullable=False)
+    batch_id: Mapped[Optional[str]] = mapped_column(ForeignKey("batches.id"), nullable=True)
+    subject_component_id: Mapped[str] = mapped_column(ForeignKey("subject_components.id"), nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    faculty_pool: Mapped[list] = mapped_column(JSON, default=list)
+    room_type: Mapped[str] = mapped_column(String, default="classroom")
+    alternate_week_pattern: Mapped[str] = mapped_column(String, default="every")
+    parallel_group: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    pinned: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+
 # ---------------------------------------------------------------------------
 # Lessons (curriculum mapping — what needs to be scheduled)
 # ---------------------------------------------------------------------------

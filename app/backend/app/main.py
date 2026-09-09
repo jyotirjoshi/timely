@@ -12,6 +12,7 @@ from app.routers import (
     auth, institutions, teachers, rooms, classes, subjects,
     lessons, timetables, solver_jobs, agent,
     holidays, absences, presets, departments, academics, workloads,
+    curriculum_requirements,
 )
 
 
@@ -60,6 +61,7 @@ app.include_router(presets.router,      prefix="/api/presets",      tags=["prese
 app.include_router(departments.router,  prefix="/api/departments",  tags=["departments"])
 app.include_router(academics.router,    prefix="/api/academics",    tags=["academics"])
 app.include_router(workloads.router,    prefix="/api/workloads",    tags=["workloads"])
+app.include_router(curriculum_requirements.router, prefix="/api/curriculum-requirements", tags=["curriculum"])
 
 
 @app.get("/api/health")

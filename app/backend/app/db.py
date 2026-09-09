@@ -85,6 +85,7 @@ def init_db():
         School, Department, DepartmentCalendar, CalendarPeriod, FacultyShift,
         Program, Division, Batch, Student, Enrollment,
         SubjectComponent, FacultyPreference, WorkloadAllocation,
+        AcademicTerm, CurriculumRequirement, SchedulingActivity,
         Lesson, Timetable, Assignment, SolveJob,
         Holiday, TeacherAbsence, SubstituteAssignment,
     )
