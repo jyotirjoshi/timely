@@ -212,6 +212,73 @@ class Subject(Base):
 
 
 # ---------------------------------------------------------------------------
+# Programs, cohorts, and student rosters
+# ---------------------------------------------------------------------------
+
+class Program(Base):
+    __tablename__ = "programs"
+    __table_args__ = (UniqueConstraint("institution_id", "code", name="uq_program_code"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    department_id: Mapped[str] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    code: Mapped[str] = mapped_column(String, nullable=False)
+    duration_years: Mapped[int] = mapped_column(Integer, default=4)
+
+
+class Division(Base):
+    __tablename__ = "divisions"
+    __table_args__ = (
+        UniqueConstraint("program_id", "name", "academic_year", "semester", name="uq_program_division"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    program_id: Mapped[str] = mapped_column(ForeignKey("programs.id"), nullable=False)
+    calendar_id: Mapped[Optional[str]] = mapped_column(ForeignKey("department_calendars.id"), nullable=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    academic_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    semester: Mapped[int] = mapped_column(Integer, nullable=False)
+    size: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Batch(Base):
+    __tablename__ = "batches"
+    __table_args__ = (UniqueConstraint("division_id", "name", name="uq_division_batch"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    division_id: Mapped[str] = mapped_column(ForeignKey("divisions.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class Student(Base):
+    __tablename__ = "students"
+    __table_args__ = (
+        UniqueConstraint("institution_id", "student_number", name="uq_student_number"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    student_number: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Enrollment(Base):
+    __tablename__ = "enrollments"
+    __table_args__ = (UniqueConstraint("student_id", "division_id", name="uq_student_division"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"), nullable=False)
+    division_id: Mapped[str] = mapped_column(ForeignKey("divisions.id"), nullable=False)
+    batch_id: Mapped[Optional[str]] = mapped_column(ForeignKey("batches.id"), nullable=True)
+
+
+# ---------------------------------------------------------------------------
 # Lessons (curriculum mapping — what needs to be scheduled)
 # ---------------------------------------------------------------------------
 

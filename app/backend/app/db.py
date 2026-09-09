@@ -83,6 +83,7 @@ def init_db():
     from app.models import (  # noqa: F401
         User, Institution, Teacher, Room, Class, Subject,
         School, Department, DepartmentCalendar, CalendarPeriod, FacultyShift,
+        Program, Division, Batch, Student, Enrollment,
         Lesson, Timetable, Assignment, SolveJob,
         Holiday, TeacherAbsence, SubstituteAssignment,
     )
