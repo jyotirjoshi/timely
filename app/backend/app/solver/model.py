@@ -347,7 +347,7 @@ def _new_solver(time_limit_s: float, seed: int, num_workers: int = 8) -> cp_mode
 
 
 def solve_timetable(dataset: dict[str, Any], time_limit_s: int = 300, seed: int = 42,
-                    num_workers: int = 1) -> SolveResult:
+                    num_workers: int = 8) -> SolveResult:
     """
     Solve a timetabling problem. See module docstring for the dataset shape.
 
@@ -355,9 +355,14 @@ def solve_timetable(dataset: dict[str, Any], time_limit_s: int = 300, seed: int 
     warm-started from the Phase 1 solution. If Phase 2 finds nothing, the
     Phase 1 timetable is returned as a guaranteed-valid fallback.
 
-    num_workers: CP-SAT parallel workers (default 1 for safety on all platforms;
-                 set to 4-8 in production for faster results).
+    num_workers: CP-SAT parallel workers (default 8 for production reliability;
+                 pass 1 when deterministic search order is required).
     """
+    if dataset.get("format") == "multi_calendar":
+        from app.solver.multi_calendar import solve_multi_calendar
+
+        return solve_multi_calendar(dataset, time_limit_s, seed, num_workers)
+
     has_soft = any(c.get("weight", 0) > 0
                    for c in dataset.get("soft_constraints", {}).values())
 

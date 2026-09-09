@@ -404,6 +404,7 @@ class Timetable(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    term_id: Mapped[Optional[str]] = mapped_column(ForeignKey("academic_terms.id"), nullable=True)
     name: Mapped[str] = mapped_column(String, default="Timetable v1")
     status: Mapped[str] = mapped_column(String, default="draft")  # draft|solving|solved|published
     soft_score: Mapped[int] = mapped_column(Integer, default=0)
@@ -428,6 +429,12 @@ class Assignment(Base):
     room_id: Mapped[str] = mapped_column(String, nullable=False)
     day: Mapped[int] = mapped_column(Integer, nullable=False)
     period: Mapped[int] = mapped_column(Integer, nullable=False)
+    activity_id: Mapped[Optional[str]] = mapped_column(ForeignKey("scheduling_activities.id"), nullable=True)
+    division_id: Mapped[Optional[str]] = mapped_column(ForeignKey("divisions.id"), nullable=True)
+    batch_id: Mapped[Optional[str]] = mapped_column(ForeignKey("batches.id"), nullable=True)
+    start_minute: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    end_minute: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    alternate_week_pattern: Mapped[str] = mapped_column(String, default="every")
 
     timetable: Mapped["Timetable"] = relationship("Timetable", back_populates="assignments")
 
@@ -441,6 +448,7 @@ class SolveJob(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     institution_id: Mapped[str] = mapped_column(String, nullable=False)
+    term_id: Mapped[Optional[str]] = mapped_column(ForeignKey("academic_terms.id"), nullable=True)
     timetable_id: Mapped[str] = mapped_column(ForeignKey("timetables.id"), nullable=True)
     status: Mapped[str] = mapped_column(String, default="queued")  # queued|running|done|failed
     progress: Mapped[int] = mapped_column(Integer, default=0)

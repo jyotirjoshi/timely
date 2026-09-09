@@ -5,8 +5,10 @@ for single-server dev; swap to Celery for production scale).
 """
 from __future__ import annotations
 
+import os
 import threading
 import uuid
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -19,13 +21,16 @@ from app.db import SessionLocal, get_db
 from app.models import Assignment, Lesson, SolveJob, Timetable, User
 from app.models import Teacher, Room, Class, Subject, Institution
 from app.solver import solve_timetable
+from app.solver.dataset import build_solver_dataset
 from app.services.access import PLANNING_MUTATOR_ROLES, institution_for, require_roles
+from app.services.solve_preflight import preflight
 
 router = APIRouter()
 
 
 class SolveRequest(BaseModel):
     institution_id: str
+    term_id: Optional[str] = None
     timetable_name: str = "Generated Timetable"
     time_limit_s: int = 60
     seed: int = 42
@@ -88,7 +93,7 @@ def _build_dataset(institution_id: str, db: Session) -> dict:
 
 
 def _run_solve(job_id: str, institution_id: str, timetable_name: str,
-               time_limit_s: int, seed: int):
+               time_limit_s: int, seed: int, term_id: str | None = None):
     """Background thread: solve and persist the result."""
     db = SessionLocal()
     try:
@@ -99,11 +104,19 @@ def _run_solve(job_id: str, institution_id: str, timetable_name: str,
         job.progress = 5
         db.commit()
 
-        dataset = _build_dataset(institution_id, db)
+        dataset = (
+            build_solver_dataset(db, institution_id, term_id)
+            if term_id else _build_dataset(institution_id, db)
+        )
         job.progress = 20
         db.commit()
 
-        result = solve_timetable(dataset, time_limit_s=time_limit_s, seed=seed)
+        result = solve_timetable(
+            dataset,
+            time_limit_s=time_limit_s,
+            seed=seed,
+            num_workers=max(1, int(os.getenv("SOLVER_WORKERS", "8"))),
+        )
 
         job.result_status = result.status
         job.soft_score = result.soft_score
@@ -113,6 +126,7 @@ def _run_solve(job_id: str, institution_id: str, timetable_name: str,
         # Create / persist timetable
         timetable = Timetable(
             institution_id=institution_id,
+            term_id=term_id,
             name=timetable_name,
             status="solved" if result.status in ("OPTIMAL", "FEASIBLE") else "failed",
             soft_score=result.soft_score,
@@ -123,16 +137,37 @@ def _run_solve(job_id: str, institution_id: str, timetable_name: str,
         db.flush()
 
         for a in result.assignments:
-            db.add(Assignment(
-                timetable_id=timetable.id,
-                lesson_id=a["lesson_id"],
-                class_id=a["class_id"],
-                subject_id=a["subject_id"],
-                teacher_id=a["teacher_id"],
-                room_id=a["room_id"],
-                day=a["day"],
-                period=a["period"],
-            ))
+            if term_id:
+                activity = next(
+                    value for value in dataset["activities"] if value["id"] == a["activity_id"]
+                )
+                db.add(Assignment(
+                    timetable_id=timetable.id,
+                    lesson_id=a["activity_id"],
+                    activity_id=a["activity_id"],
+                    class_id=a["division_id"],
+                    division_id=a["division_id"],
+                    batch_id=a.get("batch_id"),
+                    subject_id=a["subject_id"],
+                    teacher_id=a["teacher_id"],
+                    room_id=a["room_id"],
+                    day=a["day"],
+                    period=0,
+                    start_minute=a["start_minute"],
+                    end_minute=a["end_minute"],
+                    alternate_week_pattern=activity.get("alternate_week_pattern", "every"),
+                ))
+            else:
+                db.add(Assignment(
+                    timetable_id=timetable.id,
+                    lesson_id=a["lesson_id"],
+                    class_id=a["class_id"],
+                    subject_id=a["subject_id"],
+                    teacher_id=a["teacher_id"],
+                    room_id=a["room_id"],
+                    day=a["day"],
+                    period=a["period"],
+                ))
 
         job.timetable_id = timetable.id
         job.status = "done"
@@ -156,9 +191,18 @@ def start_solve(body: SolveRequest, db: Session = Depends(get_db),
                 current_user: User = Depends(require_roles(*PLANNING_MUTATOR_ROLES))):
     """Kick off an async solve job."""
     institution_id = institution_for(current_user, body.institution_id)
+    if body.term_id:
+        report = preflight(db, institution_id, body.term_id)
+        if not report.hard_feasible:
+            raise HTTPException(422, {
+                "term_id": report.term_id,
+                "hard_feasible": False,
+                "issues": [asdict(issue) for issue in report.issues],
+            })
     job = SolveJob(
         id=str(uuid.uuid4()),
         institution_id=institution_id,
+        term_id=body.term_id,
         status="queued",
     )
     db.add(job)
@@ -168,12 +212,23 @@ def start_solve(body: SolveRequest, db: Session = Depends(get_db),
     t = threading.Thread(
         target=_run_solve,
         args=(job.id, institution_id, body.timetable_name,
-              body.time_limit_s, body.seed),
+              body.time_limit_s, body.seed, body.term_id),
         daemon=True,
     )
     t.start()
 
     return {"job_id": job.id, "status": "queued"}
+
+
+@router.get("/preflight/{term_id}")
+def get_preflight(term_id: str, db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    report = preflight(db, institution_for(current_user), term_id)
+    return {
+        "term_id": report.term_id,
+        "hard_feasible": report.hard_feasible,
+        "issues": [asdict(issue) for issue in report.issues],
+    }
 
 
 @router.get("/{job_id}")
@@ -187,6 +242,7 @@ def get_job(job_id: str, db: Session = Depends(get_db),
         raise HTTPException(404, "Job not found")
     return {
         "job_id": job.id,
+        "term_id": job.term_id,
         "status": job.status,
         "progress": job.progress,
         "result_status": job.result_status,

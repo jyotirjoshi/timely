@@ -61,7 +61,7 @@ export function LandingPage() {
         </div>
         <div className="text-center mt-12"><Button size="lg" onClick={() => navigate('/register')}>Create your institution →</Button></div>
       </section>
-      <footer className="border-t py-8 text-center text-sm text-muted-foreground">© 2026 Timely. Built with OR-Tools CP-SAT + Supabase.</footer>
+      <footer className="border-t py-8 text-center text-sm text-muted-foreground">© 2026 Timely. Built with OR-Tools CP-SAT.</footer>
     </div>
   )
 }

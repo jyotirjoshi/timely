@@ -26,12 +26,16 @@ def _sa(a: Assignment) -> dict:
     return {"id": a.id, "timetable_id": a.timetable_id,
             "lesson_id": a.lesson_id, "class_id": a.class_id,
             "subject_id": a.subject_id, "teacher_id": a.teacher_id,
-            "room_id": a.room_id, "day": a.day, "period": a.period}
+            "room_id": a.room_id, "day": a.day, "period": a.period,
+            "activity_id": a.activity_id, "division_id": a.division_id,
+            "batch_id": a.batch_id, "start_minute": a.start_minute,
+            "end_minute": a.end_minute,
+            "alternate_week_pattern": a.alternate_week_pattern}
 
 
 def _st(t: Timetable, include_assignments: bool = False) -> dict:
     data = {
-        "id": t.id, "institution_id": t.institution_id,
+        "id": t.id, "institution_id": t.institution_id, "term_id": t.term_id,
         "name": t.name, "status": t.status,
         "soft_score": t.soft_score, "violations": t.violations or [],
         "solve_time_s": t.solve_time_s,

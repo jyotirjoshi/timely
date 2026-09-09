@@ -32,8 +32,8 @@ from app.services.access import (
     tenant_assignment, tenant_resource,
 )
 
-# Load .env every time the module is imported (picks up keys added after first start)
-load_dotenv(override=True)
+# Explicit process/container settings take precedence over a local developer file.
+load_dotenv(override=False)
 
 router = APIRouter()
 

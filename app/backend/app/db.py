@@ -11,7 +11,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+# Process/container configuration must take precedence over a developer .env file.
+load_dotenv(override=False)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./timely.db")
 
@@ -72,6 +73,14 @@ def _auto_migrate_sqlite():
 
     _sqlite_add_column_if_missing(db_path, "institutions", "academic_year_start", "DATE")
     _sqlite_add_column_if_missing(db_path, "institutions", "board", "VARCHAR DEFAULT ''")
+    _sqlite_add_column_if_missing(db_path, "timetables", "term_id", "VARCHAR")
+    _sqlite_add_column_if_missing(db_path, "solve_jobs", "term_id", "VARCHAR")
+    _sqlite_add_column_if_missing(db_path, "assignments", "activity_id", "VARCHAR")
+    _sqlite_add_column_if_missing(db_path, "assignments", "division_id", "VARCHAR")
+    _sqlite_add_column_if_missing(db_path, "assignments", "batch_id", "VARCHAR")
+    _sqlite_add_column_if_missing(db_path, "assignments", "start_minute", "INTEGER")
+    _sqlite_add_column_if_missing(db_path, "assignments", "end_minute", "INTEGER")
+    _sqlite_add_column_if_missing(db_path, "assignments", "alternate_week_pattern", "VARCHAR DEFAULT 'every'")
 
 
 def init_db():

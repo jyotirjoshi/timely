@@ -33,6 +33,14 @@ def add_column_if_missing(table: str, column: str, definition: str):
 # institutions — new columns from Phase 2
 add_column_if_missing("institutions", "academic_year_start", "DATE")
 add_column_if_missing("institutions", "board",               "VARCHAR DEFAULT ''")
+add_column_if_missing("timetables", "term_id", "VARCHAR")
+add_column_if_missing("solve_jobs", "term_id", "VARCHAR")
+add_column_if_missing("assignments", "activity_id", "VARCHAR")
+add_column_if_missing("assignments", "division_id", "VARCHAR")
+add_column_if_missing("assignments", "batch_id", "VARCHAR")
+add_column_if_missing("assignments", "start_minute", "INTEGER")
+add_column_if_missing("assignments", "end_minute", "INTEGER")
+add_column_if_missing("assignments", "alternate_week_pattern", "VARCHAR DEFAULT 'every'")
 
 # holidays table (may not exist yet)
 cur.execute("""
