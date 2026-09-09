@@ -278,6 +278,53 @@ class Enrollment(Base):
     batch_id: Mapped[Optional[str]] = mapped_column(ForeignKey("batches.id"), nullable=True)
 
 
+class SubjectComponent(Base):
+    __tablename__ = "subject_components"
+    __table_args__ = (
+        UniqueConstraint("department_id", "subject_id", "component_type", name="uq_subject_component"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    department_id: Mapped[str] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.id"), nullable=False)
+    component_type: Mapped[str] = mapped_column(String, nullable=False)
+    weekly_hours: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    room_type: Mapped[str] = mapped_column(String, default="classroom")
+
+
+class FacultyPreference(Base):
+    __tablename__ = "faculty_preferences"
+    __table_args__ = (
+        UniqueConstraint("teacher_id", "subject_component_id", name="uq_faculty_preference"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("teachers.id"), nullable=False)
+    subject_component_id: Mapped[str] = mapped_column(ForeignKey("subject_components.id"), nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class WorkloadAllocation(Base):
+    __tablename__ = "workload_allocations"
+    __table_args__ = (
+        UniqueConstraint("teacher_id", "subject_component_id", "division_id", name="uq_workload_allocation"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    institution_id: Mapped[str] = mapped_column(ForeignKey("institutions.id"), nullable=False)
+    teacher_id: Mapped[str] = mapped_column(ForeignKey("teachers.id"), nullable=False)
+    subject_component_id: Mapped[str] = mapped_column(ForeignKey("subject_components.id"), nullable=False)
+    division_id: Mapped[str] = mapped_column(ForeignKey("divisions.id"), nullable=False)
+    weekly_hours: Mapped[float] = mapped_column(Float, nullable=False)
+    is_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    override_reason: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+
 # ---------------------------------------------------------------------------
 # Lessons (curriculum mapping — what needs to be scheduled)
 # ---------------------------------------------------------------------------
