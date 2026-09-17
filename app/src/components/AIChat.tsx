@@ -75,12 +75,12 @@ export function AIChat() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Don't render on public pages or when not logged in
+  // NOTE: this check must come AFTER all hooks (React rules of hooks)
   const isPublicPage = HIDE_ON.includes(location.pathname)
-  if (isPublicPage || !token) return null
 
   // Auto-load latest timetable when chat opens
   useEffect(() => {
-    if (!open || !instId || timetable) return
+    if (!open || !instId || timetable || isPublicPage || !token) return
     const load = async () => {
       setLoadingTT(true)
       try {
@@ -165,7 +165,9 @@ export function AIChat() {
     } finally { setApplying(null) }
   }
 
-  // Closed state — floating button
+  // Closed state — floating button (hide on public pages / not logged in)
+  if (isPublicPage || !token) return null
+
   if (!open) {
     return (
       <button
