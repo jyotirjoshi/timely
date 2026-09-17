@@ -1,0 +1,30 @@
+services:
+  api:
+    build:
+      context: ../../app/backend
+    command: uvicorn app.timetable_main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: sqlite:////data/timely-timetable.db
+      SECRET_KEY: ${SECRET_KEY:-local-demo-change-before-production}
+      AI_PROVIDER: ${AI_PROVIDER:-none}
+      SOLVER_WORKERS: ${SOLVER_WORKERS:-8}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      FRONTEND_URL: http://localhost:5173
+    ports:
+      - "8000:8000"
+    volumes:
+      - timetable_data:/data
+
+  web:
+    build:
+      context: ../../app
+      args:
+        VITE_API_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+
+volumes:
+  timetable_data:

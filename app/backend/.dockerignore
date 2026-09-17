@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.pyc
+.pytest_cache/
+.env
+*.db
+*.sqlite3
+tests/
+.git/
+.gitignore
+Dockerfile

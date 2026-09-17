@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: timely-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false   # set manually in Render dashboard
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AI_PROVIDER
+        value: none
+      - key: FRONTEND_URL
+        sync: false   # set after Vercel deploy
